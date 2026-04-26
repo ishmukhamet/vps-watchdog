@@ -1,0 +1,16 @@
+#!/bin/sh
+
+LOGGER="${VPS_WATCHDOG_LOGGER:-__LOGGER__}"
+if [ "$LOGGER" = "__LOGGER__" ]; then
+  LOGGER="$(command -v logger 2>/dev/null || printf /usr/bin/logger)"
+fi
+
+hex_encode() {
+  printf 'hex:'
+  printf '%s' "$1" | od -An -tx1 | tr -d ' \n'
+}
+
+"$LOGGER" -p authpriv.notice -t vps-watchdog-login -- \
+  "event=login service=$(hex_encode "${PAM_SERVICE:-unknown}") user=$(hex_encode "${PAM_USER:-unknown}") rhost=$(hex_encode "${PAM_RHOST:-local}") tty=$(hex_encode "${PAM_TTY:-unknown}") type=$(hex_encode "${PAM_TYPE:-unknown}")"
+
+exit 0

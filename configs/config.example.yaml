@@ -1,0 +1,25 @@
+host_id: "example-vps"
+
+telegram:
+  token_file: /etc/vps-watchdog/telegram.token
+  chat_id_file: /etc/vps-watchdog/telegram.chat_id
+
+login:
+  enabled: true
+
+sudo:
+  enabled: true
+
+load:
+  enabled: true
+  sample_interval_sec: 15
+  cooldown_sec: 900
+
+  cpu_busy_percent: 90
+  cpu_duration_sec: 180
+
+  mem_available_percent: 10
+  mem_duration_sec: 180
+
+  psi_io_some_avg60: 20
+  io_duration_sec: 180

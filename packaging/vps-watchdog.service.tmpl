@@ -1,0 +1,25 @@
+[Unit]
+Description=VPS Watchdog security monitoring agent
+
+[Service]
+Type=simple
+User=vpswatchdog
+Group=vpswatchdog
+__SUPPLEMENTARY_GROUPS__
+ExecStart=/usr/local/bin/vps-watchdog agent --config /etc/vps-watchdog/config.yaml
+Restart=always
+RestartSec=5
+StateDirectory=vps-watchdog
+RuntimeDirectory=vps-watchdog
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/vps-watchdog /run/vps-watchdog
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+LockPersonality=true
+CapabilityBoundingSet=
+
+[Install]
+WantedBy=multi-user.target

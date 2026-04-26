@@ -1,0 +1,43 @@
+# Build outputs
+/bin/
+/dist/
+/build/
+*.out
+*.test
+*.prof
+coverage.txt
+coverage.html
+
+# Go workspace noise
+/vendor/
+go.work
+go.work.sum
+
+# Local config and secrets
+.env
+.env.*
+*.local
+*.secret
+telegram.token
+telegram.chat_id
+config.local.yaml
+
+# OS/editor files
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Logs and runtime state
+*.log
+*.pid
+*.cursor
+*.queue
+/tmp/
+
+# Archives
+*.tar.gz
+*.zip
