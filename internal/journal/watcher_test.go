@@ -56,6 +56,23 @@ func TestJournalctlArgsResumeWhenCursorFileExists(t *testing.T) {
 	}
 }
 
+func TestJournalctlArgsCanFollowAllJournalsWithExplicitMatches(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "sudo.cursor")
+	args := Watcher{
+		CursorFile:  path,
+		AllJournals: true,
+		Matches:     []string{"_COMM=sudo", "+", "_EXE=/usr/bin/sudo", "+", "SYSLOG_IDENTIFIER=sudo"},
+	}.journalctlArgs()
+	if contains(args, "--system") {
+		t.Fatalf("sudo watcher should not be system-journal-only: %v", args)
+	}
+	for _, want := range []string{"_COMM=sudo", "+", "_EXE=/usr/bin/sudo", "SYSLOG_IDENTIFIER=sudo"} {
+		if !contains(args, want) {
+			t.Fatalf("args missing %q: %v", want, args)
+		}
+	}
+}
+
 func TestScanEntriesSkipsOversizedLine(t *testing.T) {
 	input := strings.Repeat("x", maxJournalLineBytes+1) + "\n" + `{"SYSLOG_IDENTIFIER":"sudo","MESSAGE":"ok"}` + "\n"
 	var entries []Entry

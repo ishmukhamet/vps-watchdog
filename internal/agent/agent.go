@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/ishmukhamet/vps-watchdog/internal/config"
@@ -47,8 +48,16 @@ func (a *Agent) Run(ctx context.Context) error {
 	}
 	if a.cfg.Sudo.Enabled {
 		go a.runJournalLoop(ctx, "sudo", journal.Watcher{
-			Identifier: "sudo",
-			CursorFile: a.state.Path("sudo.cursor"),
+			Identifier:  "sudo",
+			CursorFile:  a.state.Path("sudo.cursor"),
+			AllJournals: true,
+			Matches: []string{
+				"_COMM=sudo",
+				"+",
+				"_EXE=/usr/bin/sudo",
+				"+",
+				"SYSLOG_IDENTIFIER=sudo",
+			},
 		}, a.handleSudoEntry, errCh)
 	}
 	if a.cfg.Load.Enabled {
@@ -133,6 +142,20 @@ func (a *Agent) handleLoginEntry(ctx context.Context, entry journal.Entry) error
 }
 
 func (a *Agent) handleSudoEntry(ctx context.Context, entry journal.Entry) error {
+	e, ok := a.sudoEvent(entry)
+	if !ok {
+		return nil
+	}
+	a.emitEvent(ctx, e)
+	return nil
+}
+
+func (a *Agent) sudoEvent(entry journal.Entry) (event.Event, bool) {
+	message := strings.TrimSpace(entry.Message)
+	if message == "" || isSudoSessionNoise(message) {
+		return event.Event{}, false
+	}
+
 	ts := entry.Timestamp
 	if ts.IsZero() {
 		ts = time.Now().UTC()
@@ -144,14 +167,102 @@ func (a *Agent) handleSudoEntry(ctx context.Context, entry journal.Entry) error 
 		Severity: event.SeverityWarning,
 		Title:    "sudo activity detected",
 		Fields: map[string]string{
-			"message": entry.Message,
+			"message": message,
 		},
 	}
+	classifySudoMessage(message, e.Fields, &e.Title)
 	if entry.Fields["_UID"] != "" {
 		e.Fields["uid"] = entry.Fields["_UID"]
 	}
-	a.emitEvent(ctx, e)
-	return nil
+	return e, true
+}
+
+func isSudoSessionNoise(message string) bool {
+	return strings.Contains(message, "pam_unix(sudo:session): session opened") ||
+		strings.Contains(message, "pam_unix(sudo:session): session closed")
+}
+
+func classifySudoMessage(message string, fields map[string]string, title *string) {
+	if strings.Contains(message, "pam_unix(sudo:auth): authentication failure") {
+		*title = "sudo authentication failed"
+		fields["reason"] = "authentication failure"
+		for key, value := range parseSpaceKeyValues(strings.NewReplacer(";", " ").Replace(message)) {
+			switch key {
+			case "logname":
+				fields["actor"] = value
+			case "user":
+				fields["target_user"] = value
+			case "tty":
+				fields["tty"] = value
+			case "ruser":
+				fields["ruser"] = value
+			}
+		}
+		return
+	}
+
+	actor, parts, ok := parseSudoColonMessage(message)
+	if !ok {
+		return
+	}
+	if actor != "" {
+		fields["actor"] = actor
+	}
+	for _, part := range parts {
+		if strings.Contains(part, "user NOT in sudoers") {
+			*title = "sudo denied"
+			fields["reason"] = "user NOT in sudoers"
+			continue
+		}
+		key, value, ok := strings.Cut(part, "=")
+		if !ok {
+			continue
+		}
+		switch strings.TrimSpace(key) {
+		case "TTY":
+			fields["tty"] = strings.TrimSpace(value)
+		case "PWD":
+			fields["pwd"] = strings.TrimSpace(value)
+		case "USER":
+			fields["target_user"] = strings.TrimSpace(value)
+		case "COMMAND":
+			fields["command"] = strings.TrimSpace(value)
+			if *title != "sudo denied" {
+				*title = "sudo command executed"
+			}
+		}
+	}
+}
+
+func parseSudoColonMessage(message string) (string, []string, bool) {
+	actor, rest, ok := strings.Cut(message, ":")
+	if !ok {
+		return "", nil, false
+	}
+	actor = strings.TrimSpace(actor)
+	if actor == "" || strings.Contains(actor, "(") {
+		return "", nil, false
+	}
+	parts := strings.Split(rest, ";")
+	out := make([]string, 0, len(parts))
+	for _, part := range parts {
+		part = strings.TrimSpace(part)
+		if part != "" {
+			out = append(out, part)
+		}
+	}
+	return actor, out, len(out) > 0
+}
+
+func parseSpaceKeyValues(message string) map[string]string {
+	out := map[string]string{}
+	for _, part := range strings.Fields(message) {
+		key, value, ok := strings.Cut(part, "=")
+		if ok && key != "" {
+			out[key] = value
+		}
+	}
+	return out
 }
 
 func (a *Agent) runLoadMonitor(ctx context.Context) error {

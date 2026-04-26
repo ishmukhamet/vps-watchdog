@@ -115,11 +115,16 @@ normalizes each line into a login alert.
 
 ## Sudo detection
 
-The Go agent follows journald for `SYSLOG_IDENTIFIER=sudo`. Sudo log formats vary
-across distributions and sudo versions, so the first implementation preserves the
-raw message and extracts only stable metadata where available.
+The Go agent follows journald for sudo entries across journals visible to the
+runtime user. It matches `_COMM=sudo`, `_EXE=/usr/bin/sudo`, and
+`SYSLOG_IDENTIFIER=sudo` because some VPS images expose sudo syslog entries only
+outside `journalctl --system`.
 
-Later versions may add structured parsers per known format.
+Sudo log formats vary across distributions and sudo versions. The MVP classifies
+common command execution, authentication failure, and not-in-sudoers denial
+messages, while preserving the raw message in the alert fields. PAM session
+opened/closed messages are ignored to avoid duplicate noise around one sudo
+command.
 
 ## Load detection
 
@@ -171,6 +176,8 @@ Future state may include notification queues and durable rate-limit windows.
 - journal watchers are restarted by the agent if `journalctl` exits.
 - journal watchers cancel their `journalctl` subprocess when entry handling fails
   so handler errors do not leave a hanging `journalctl --follow` process.
+- bounded `journalctl` stderr is returned with watcher errors so permission and
+  filter problems are visible in service logs.
 - oversized journald JSON lines are skipped instead of causing a permanent
   watcher restart loop on untrusted input.
 - Telegram failures are returned to the caller and logged without token leakage,

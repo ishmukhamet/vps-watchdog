@@ -96,6 +96,11 @@ sudo /usr/local/bin/vps-watchdog test-notify --config /etc/vps-watchdog/config.y
   notification asynchronous after local watchers are launched.
 - 2026-04-26: Added bounded in-memory notification queue so Telegram delivery
   does not block login/sudo journal scanning.
+- 2026-04-26: Discovered on a real VPS that sudo entries may be visible only
+  without `journalctl --system`; planned sudo watcher matching across accessible
+  journals and structured sudo alert classification.
+- 2026-04-26: Changed Telegram rendering to compact alerts with
+  `[emoji] [hh:mm:ss] [host]` headers and event details in the message body.
 
 ## Decision log
 
@@ -113,6 +118,11 @@ sudo /usr/local/bin/vps-watchdog test-notify --config /etc/vps-watchdog/config.y
   they prevent the agent from starting successfully.
 - 2026-04-26: Do not let Telegram/network availability gate login and sudo
   monitoring startup.
+- 2026-04-26: Follow sudo via `_COMM=sudo` / `_EXE=/usr/bin/sudo` / strong
+  identifier fallback across accessible journals instead of system-journal-only
+  matching, because sudo syslog entries can live outside `journalctl --system`.
+- 2026-04-26: Use compact Telegram alert headers to keep mobile notifications
+  scannable while retaining structured fields below the event title.
 
 ## Risks and mitigations
 

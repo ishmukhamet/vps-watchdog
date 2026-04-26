@@ -71,10 +71,15 @@ Check:
 Check whether sudo logs to journald on the host:
 
 ```bash
-sudo journalctl --identifier=sudo -n 20 --no-pager
+sudo journalctl --no-pager -n 20 _COMM=sudo
+sudo journalctl --no-pager -n 20 _EXE=/usr/bin/sudo
+sudo journalctl --no-pager -n 20 SYSLOG_IDENTIFIER=sudo
 ```
 
-If no entries appear, distro-specific sudo/syslog configuration may be needed.
+The agent follows sudo entries across journals visible to the service runtime
+user. If root can see entries but the service cannot, check the rendered unit for
+`SupplementaryGroups=systemd-journal adm` and inspect service logs for
+`journalctl stderr` permission errors.
 
 ### Old events after reinstall
 

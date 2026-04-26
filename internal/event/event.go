@@ -36,26 +36,18 @@ type Event struct {
 }
 
 func FormatTelegramHTML(e Event) string {
-	icon := severityIcon(e.Severity)
 	var b strings.Builder
-	b.WriteString(icon)
-	b.WriteString(" <b>")
-	b.WriteString(escape(e.Title))
-	b.WriteString("</b>\n")
-	if e.Host != "" {
-		b.WriteString("host: <code>")
-		b.WriteString(escape(e.Host))
-		b.WriteString("</code>\n")
-	}
-	if !e.Time.IsZero() {
-		b.WriteString("time: <code>")
-		b.WriteString(escape(e.Time.UTC().Format(time.RFC3339)))
-		b.WriteString("</code>\n")
-	}
-	if e.Type != "" {
-		b.WriteString("type: <code>")
-		b.WriteString(escape(string(e.Type)))
-		b.WriteString("</code>\n")
+	b.WriteString("[")
+	b.WriteString(severityIcon(e.Severity))
+	b.WriteString("] [")
+	b.WriteString(eventClock(e.Time))
+	b.WriteString("] [")
+	b.WriteString(escape(eventHost(e.Host)))
+	b.WriteString("]\n\n")
+	if strings.TrimSpace(e.Title) != "" {
+		b.WriteString("<b>")
+		b.WriteString(escape(e.Title))
+		b.WriteString("</b>")
 	}
 
 	keys := make([]string, 0, len(e.Fields))
@@ -68,12 +60,30 @@ func FormatTelegramHTML(e Event) string {
 		if v == "" {
 			continue
 		}
+		if b.Len() > 0 && !strings.HasSuffix(b.String(), "\n\n") {
+			b.WriteString("\n")
+		}
 		b.WriteString(escape(k))
 		b.WriteString(": <code>")
 		b.WriteString(escape(v))
-		b.WriteString("</code>\n")
+		b.WriteString("</code>")
 	}
 	return strings.TrimRight(b.String(), "\n")
+}
+
+func eventClock(t time.Time) string {
+	if t.IsZero() {
+		return "--:--:--"
+	}
+	return t.UTC().Format("15:04:05")
+}
+
+func eventHost(host string) string {
+	host = strings.TrimSpace(host)
+	if host == "" {
+		return "unknown"
+	}
+	return host
 }
 
 func severityIcon(s Severity) string {

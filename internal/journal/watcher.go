@@ -15,7 +15,10 @@ import (
 	"time"
 )
 
-const maxJournalLineBytes = 1024 * 1024
+const (
+	maxJournalLineBytes = 1024 * 1024
+	maxStderrBytes      = 4096
+)
 
 type Entry struct {
 	Timestamp  time.Time
@@ -25,16 +28,18 @@ type Entry struct {
 }
 
 type Watcher struct {
-	Identifier string
-	CursorFile string
-	Command    string
+	Identifier  string
+	CursorFile  string
+	Command     string
+	AllJournals bool
+	Matches     []string
 }
 
 type Handler func(context.Context, Entry) error
 
 func (w Watcher) Run(ctx context.Context, handler Handler) error {
-	if strings.TrimSpace(w.Identifier) == "" {
-		return fmt.Errorf("journal identifier is required")
+	if len(w.matchArgs()) == 0 {
+		return fmt.Errorf("journal match is required")
 	}
 	cmdName := w.Command
 	if cmdName == "" {
@@ -104,15 +109,35 @@ func (w Watcher) Run(ctx context.Context, handler Handler) error {
 }
 
 func (w Watcher) journalctlArgs() []string {
-	args := []string{"--system", "--follow", "--no-pager", "--output=json"}
+	args := []string{"--follow", "--no-pager", "--output=json"}
+	if !w.AllJournals {
+		args = append([]string{"--system"}, args...)
+	}
 	if w.CursorFile != "" {
 		args = append(args, "--cursor-file="+w.CursorFile)
 		if _, err := os.Stat(w.CursorFile); os.IsNotExist(err) {
 			args = append(args, "--since=now")
 		}
 	}
-	args = append(args, "SYSLOG_IDENTIFIER="+w.Identifier)
+	args = append(args, w.matchArgs()...)
 	return args
+}
+
+func (w Watcher) matchArgs() []string {
+	if len(w.Matches) > 0 {
+		out := make([]string, 0, len(w.Matches))
+		for _, match := range w.Matches {
+			match = strings.TrimSpace(match)
+			if match != "" {
+				out = append(out, match)
+			}
+		}
+		return out
+	}
+	if strings.TrimSpace(w.Identifier) == "" {
+		return nil
+	}
+	return []string{"SYSLOG_IDENTIFIER=" + w.Identifier}
 }
 
 func scanEntries(ctx context.Context, r io.Reader, handler Handler) error {
@@ -163,8 +188,18 @@ func scanEntries(ctx context.Context, r io.Reader, handler Handler) error {
 }
 
 func consumeStderr(r io.Reader) error {
-	_, _ = io.Copy(io.Discard, r)
-	return nil
+	data, err := io.ReadAll(io.LimitReader(r, maxStderrBytes+1))
+	if err != nil {
+		return err
+	}
+	text := strings.TrimSpace(string(data))
+	if text == "" {
+		return nil
+	}
+	if len(data) > maxStderrBytes {
+		text += "... [truncated]"
+	}
+	return fmt.Errorf("journalctl stderr: %s", text)
 }
 
 func ParseJSONLine(line []byte) (Entry, error) {
