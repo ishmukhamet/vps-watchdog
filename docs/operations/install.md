@@ -1,6 +1,39 @@
 # Installation
 
-## Build
+## Install From Release
+
+For a public release, download and run the release bootstrap script:
+
+```bash
+curl -fsSLO https://raw.githubusercontent.com/ishmukhamet/vps-watchdog/master/scripts/install-release.sh
+sh install-release.sh latest
+```
+
+For a pinned version:
+
+```bash
+sh install-release.sh v0.1.0
+```
+
+The bootstrap script downloads `vps-watchdog-linux-amd64.tar.gz` and
+`checksums.txt` from GitHub Releases, verifies the checksum, extracts the archive,
+prints the bundled binary version, and then runs the local installer through
+`sudo`.
+
+Manual release install:
+
+```bash
+VERSION=v0.1.0
+curl -fsSLO "https://github.com/ishmukhamet/vps-watchdog/releases/download/${VERSION}/vps-watchdog-linux-amd64.tar.gz"
+curl -fsSLO "https://github.com/ishmukhamet/vps-watchdog/releases/download/${VERSION}/checksums.txt"
+sha256sum -c --ignore-missing checksums.txt
+mkdir -p vps-watchdog-install
+tar -xzf vps-watchdog-linux-amd64.tar.gz -C vps-watchdog-install
+cd vps-watchdog-install
+sudo ./packaging/install.sh --bin ./vps-watchdog
+```
+
+## Install From Source
 
 From the repository root:
 
@@ -14,7 +47,7 @@ This creates:
 dist/vps-watchdog-linux-amd64
 ```
 
-## Install
+## Install Built Binary
 
 On the target VPS:
 

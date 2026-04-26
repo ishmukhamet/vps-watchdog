@@ -55,8 +55,9 @@ needs integration testing on real VPS images before public release.
 - No durable notification queue yet.
 - The runtime notification queue is in-memory and best-effort; events may be
   dropped during prolonged Telegram/network outages.
-- Sudo parsing is raw-message-first.
-- No GitHub release workflow yet.
+- Sudo parsing classifies common command, auth failure, and denial messages;
+  distro-specific sudo formats still need broader coverage.
+- GitHub release workflow exists but needs a first public tag/release dry run.
 - No distro compatibility matrix yet.
 - Installer behavior still needs VM-level idempotency checks across supported
   distro versions.

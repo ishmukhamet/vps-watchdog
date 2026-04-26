@@ -56,6 +56,7 @@ metrics. Use a small notifier interface with Telegram as the only implementation
 - [x] Implement journal watcher foundation.
 - [x] Implement `/proc` metrics foundation.
 - [x] Implement installer and uninstaller scripts.
+- [x] Add GitHub release packaging workflow and public release bootstrap script.
 - [ ] Smoke test on Debian/Ubuntu VPS.
 - [ ] Tune alert threshold behavior after real-host testing.
 - [ ] Add durable notification queue.
@@ -101,6 +102,9 @@ sudo /usr/local/bin/vps-watchdog test-notify --config /etc/vps-watchdog/config.y
   journals and structured sudo alert classification.
 - 2026-04-26: Changed Telegram rendering to compact alerts with
   `[emoji] [hh:mm:ss] [host]` headers and event details in the message body.
+- 2026-04-26: Added a tag-driven GitHub release workflow that publishes the
+  packaged `linux/amd64` tarball and checksums, plus a non-root bootstrap script
+  that downloads, verifies, extracts, and delegates to the local installer.
 
 ## Decision log
 
@@ -123,6 +127,9 @@ sudo /usr/local/bin/vps-watchdog test-notify --config /etc/vps-watchdog/config.y
   matching, because sudo syslog entries can live outside `journalctl --system`.
 - 2026-04-26: Use compact Telegram alert headers to keep mobile notifications
   scannable while retaining structured fields below the event title.
+- 2026-04-26: Keep the root installer local-only (`install.sh --bin`) and put
+  network download/checksum verification in a separate non-root release bootstrap
+  script instead of embedding GitHub URLs in the privileged installer.
 
 ## Risks and mitigations
 

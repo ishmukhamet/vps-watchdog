@@ -67,6 +67,43 @@ The project targets:
 
 ARM builds are intentionally out of scope for now.
 
+## Quick start from release
+
+For public releases, download the small bootstrap script and run it with a pinned
+version or `latest`:
+
+```bash
+curl -fsSLO https://raw.githubusercontent.com/ishmukhamet/vps-watchdog/master/scripts/install-release.sh
+sh install-release.sh latest
+```
+
+The bootstrap script runs without root while it downloads the release tarball,
+downloads `checksums.txt`, verifies the archive, extracts it, and then delegates
+the privileged part to:
+
+```bash
+sudo ./packaging/install.sh --bin ./vps-watchdog
+```
+
+To install a specific version:
+
+```bash
+sh install-release.sh v0.1.0
+```
+
+Manual release install:
+
+```bash
+VERSION=v0.1.0
+curl -fsSLO "https://github.com/ishmukhamet/vps-watchdog/releases/download/${VERSION}/vps-watchdog-linux-amd64.tar.gz"
+curl -fsSLO "https://github.com/ishmukhamet/vps-watchdog/releases/download/${VERSION}/checksums.txt"
+sha256sum -c --ignore-missing checksums.txt
+mkdir -p vps-watchdog-install
+tar -xzf vps-watchdog-linux-amd64.tar.gz -C vps-watchdog-install
+cd vps-watchdog-install
+sudo ./packaging/install.sh --bin ./vps-watchdog
+```
+
 ## Quick start from source
 
 ```bash

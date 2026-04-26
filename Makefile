@@ -55,7 +55,7 @@ package: build
 	mkdir -p $(DIST_DIR)/package
 	cp $(BIN) $(DIST_DIR)/package/$(APP)
 	cp README.md LICENSE $(DIST_DIR)/package/
-	cp -R packaging configs docs AGENTS.md $(DIST_DIR)/package/
+	cp -R packaging configs docs scripts AGENTS.md $(DIST_DIR)/package/
 	tar -C $(DIST_DIR)/package -czf $(DIST_DIR)/$(APP)-linux-amd64.tar.gz .
 	rm -rf $(DIST_DIR)/package
 

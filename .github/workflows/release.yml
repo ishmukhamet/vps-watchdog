@@ -1,0 +1,51 @@
+name: release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Run checks
+        run: |
+          VERSION="${GITHUB_REF_NAME}" make check
+          git diff --exit-code
+
+      - name: Build release package
+        run: |
+          make clean
+          VERSION="${GITHUB_REF_NAME}" make package
+
+      - name: Generate checksums
+        run: |
+          cd dist
+          sha256sum vps-watchdog-linux-amd64.tar.gz > checksums.txt
+          sha256sum -c checksums.txt
+
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${GITHUB_REF_NAME}" \
+            dist/vps-watchdog-linux-amd64.tar.gz \
+            dist/checksums.txt \
+            --title "${GITHUB_REF_NAME}" \
+            --notes "Pre-alpha release artifact for linux/amd64. Download the tarball, verify checksums.txt, extract it, then run packaging/install.sh with the bundled binary." \
+            --prerelease
