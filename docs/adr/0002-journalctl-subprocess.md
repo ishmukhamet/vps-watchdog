@@ -11,7 +11,9 @@ wants a simple static `linux/amd64` Go binary for the first release.
 
 ## Decision
 
-Use `journalctl` as a subprocess with JSON output and cursor files.
+Use `journalctl` as a subprocess with JSON output. The agent stores the
+journal cursor itself and passes it back on the next start
+([ADR 0007](0007-journal-cursor-start-at-now.md)).
 
 ## Consequences
 

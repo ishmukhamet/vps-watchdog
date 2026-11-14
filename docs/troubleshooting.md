@@ -66,3 +66,9 @@ from another host or an old journal can cause skipped or replayed events. Stop
 the service, delete the `*.cursor` files, and start it again: watching resumes
 from the current time
 ([ADR 0007](adr/0007-journal-cursor-start-at-now.md)).
+
+A cursor that is malformed or that journalctl cannot use is moved aside
+automatically: the service log shows `journal cursor rejected by journalctl` or
+`has an invalid format`, and the old value is kept in `*.cursor.rejected` for
+inspection. Watching resumes from the current time, so
+events since the last saved position are not alerted.

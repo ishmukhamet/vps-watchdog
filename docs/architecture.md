@@ -72,10 +72,11 @@ PSI is optional; hosts without it simply have no I/O signal.
 
 ## Journal cursors
 
-Journal watchers persist a cursor in the state directory so restarts resume
-where they stopped. Without a cursor (first install, wiped state), watchers start
-at the current time: replaying retained history would flood the chat with old
-events. See [ADR 0007](adr/0007-journal-cursor-start-at-now.md).
+Journal watchers save the cursor of every handled entry in the state
+directory, so restarts, including after a forced reset, resume where they
+stopped. Without a cursor (first install, wiped state), a watcher starts at the
+current end of the journal: replaying retained history would flood the chat
+with old events. See [ADR 0007](adr/0007-journal-cursor-start-at-now.md).
 
 ## Failure model
 

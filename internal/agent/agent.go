@@ -44,6 +44,7 @@ func (a *Agent) Run(ctx context.Context) error {
 		go a.runJournalLoop(ctx, "login", journal.Watcher{
 			Identifier: "vps-watchdog-login",
 			CursorFile: a.state.Path("login.cursor"),
+			Logf:       a.log.Printf,
 		}, a.handleLoginEntry, errCh)
 	}
 	if a.cfg.Sudo.Enabled {
@@ -51,6 +52,7 @@ func (a *Agent) Run(ctx context.Context) error {
 			Identifier:  "sudo",
 			CursorFile:  a.state.Path("sudo.cursor"),
 			AllJournals: true,
+			Logf:        a.log.Printf,
 			Matches: []string{
 				"_COMM=sudo",
 				"+",
