@@ -2,6 +2,7 @@ package metrics
 
 import (
 	"bufio"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -238,7 +239,7 @@ func (c *Collector) Snapshot() (Snapshot, error) {
 	}
 
 	if !snap.CPUAvailable && !snap.MemAvailable && !snap.PSIIO.Available && len(errs) > 0 {
-		return snap, fmt.Errorf(strings.Join(errs, "; "))
+		return snap, errors.New(strings.Join(errs, "; "))
 	}
 	return snap, nil
 }
