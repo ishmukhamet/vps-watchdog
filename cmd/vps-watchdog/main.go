@@ -15,6 +15,7 @@ import (
 	"github.com/ishmukhamet/vps-watchdog/internal/agent"
 	"github.com/ishmukhamet/vps-watchdog/internal/config"
 	"github.com/ishmukhamet/vps-watchdog/internal/event"
+	"github.com/ishmukhamet/vps-watchdog/internal/liveness"
 	"github.com/ishmukhamet/vps-watchdog/internal/notifier/telegram"
 )
 
@@ -106,7 +107,14 @@ func runValidateConfig(args []string) error {
 		return err
 	}
 
-	fmt.Printf("config ok: host_id=%q login=%t sudo=%t load=%t\n", cfg.HostID, cfg.Login.Enabled, cfg.Sudo.Enabled, cfg.Load.Enabled)
+	if cfg.Liveness.Enabled {
+		if _, err := liveness.LoadFile(cfg.Liveness.PingURLFile); err != nil {
+			return err
+		}
+	}
+
+	fmt.Printf("config ok: host_id=%q login=%t sudo=%t load=%t disk=%t reboot=%t liveness=%t\n",
+		cfg.HostID, cfg.Login.Enabled, cfg.Sudo.Enabled, cfg.Load.Enabled, cfg.Disk.Enabled, cfg.Reboot.Enabled, cfg.Liveness.Enabled)
 	return nil
 }
 

@@ -188,6 +188,23 @@ load:
 
   psi_io_some_avg60: 20
   io_duration_sec: 180
+
+disk:
+  enabled: true
+  paths: "/"
+  sample_interval_sec: 60
+  cooldown_sec: 21600
+  duration_sec: 300
+  free_percent: 10
+  inodes_free_percent: 10
+
+reboot:
+  enabled: true
+
+liveness:
+  enabled: false
+  ping_url_file: /etc/vps-watchdog/liveness.url
+  interval_sec: 60
 EOF
 fi
 chown root:"$RUN_GROUP" "$CONFIG_DIR/config.yaml"
@@ -196,6 +213,11 @@ chmod 0640 "$CONFIG_DIR/config.yaml"
 if [[ -f "$CONFIG_DIR/telegram.token" ]]; then
   chown root:"$RUN_GROUP" "$CONFIG_DIR/telegram.token"
   chmod 0640 "$CONFIG_DIR/telegram.token"
+fi
+
+if [[ -f "$CONFIG_DIR/liveness.url" ]]; then
+  chown root:"$RUN_GROUP" "$CONFIG_DIR/liveness.url"
+  chmod 0640 "$CONFIG_DIR/liveness.url"
 fi
 
 if [[ -f "$CONFIG_DIR/telegram.chat_id" ]]; then

@@ -23,3 +23,20 @@ load:
 
   psi_io_some_avg60: 20
   io_duration_sec: 180
+
+disk:
+  enabled: true
+  paths: "/"
+  sample_interval_sec: 60
+  cooldown_sec: 21600
+  duration_sec: 300
+  free_percent: 10
+  inodes_free_percent: 10
+
+reboot:
+  enabled: true
+
+liveness:
+  enabled: false
+  ping_url_file: /etc/vps-watchdog/liveness.url
+  interval_sec: 60

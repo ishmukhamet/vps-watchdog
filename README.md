@@ -21,7 +21,13 @@ Alerts on:
 - successful PAM-covered logins (SSH, console);
 - `sudo` commands, authentication failures, and denials;
 - sustained high CPU, low available memory, and Linux PSI I/O pressure;
+- low free disk space or inodes;
+- reboots, with whether the previous run stopped cleanly and the downtime;
 - agent start and stop.
+
+Optionally, the agent pings an external dead man's switch such as
+[Healthchecks](https://healthchecks.io), which raises an alarm when the host
+goes silent.
 
 Not a goal: blocking access, EDR, tamper resistance after root compromise,
 cloud control-panel monitoring, notifiers other than Telegram, or replacing

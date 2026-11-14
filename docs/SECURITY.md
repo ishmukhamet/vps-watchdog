@@ -14,7 +14,9 @@ It detects; it does not prevent, and it is not an audit log.
 It can see what passes through PAM, journald, and `/proc` on the host while the
 agent is intact. It cannot see:
 
-- access through the cloud provider's panel or hypervisor;
+- access through the cloud provider's panel or hypervisor, beyond its side
+  effects: an unplanned reboot is reported, and with liveness pings enabled a
+  host that goes silent raises an alarm off-host;
 - kernel-level rootkits or anything else that hides from PAM and journald;
 - activity after an attacker with root has disabled or altered the agent;
 - network-level compromise that leaves no local trace.
@@ -47,11 +49,12 @@ installer runs as root. See
 
 **Secrets live in files, not in config, flags, or logs.**
 
-- The bot token and chat id are separate files readable only by root and the
-  runtime group. The installer enforces this on every run.
-- The token is never printed, passed as a CLI flag, or logged — including inside
-  a full Telegram API URL. Delivery errors are sanitized because Go network
-  errors embed the request URL.
+- The bot token, chat id, and liveness ping URL are separate files readable
+  only by root and the runtime group. The installer enforces this on every run.
+  The ping URL is a secret: anyone who knows it can keep the check green.
+- The token and the ping URL are never printed, passed as CLI flags, or logged —
+  including inside a full Telegram API URL. Delivery and ping errors are
+  sanitized because Go network errors embed the request URL.
 - No real secrets, hostnames, IP addresses, or chat ids in examples, tests,
   docs, or issues. `make check-docs` scans for token-shaped strings.
 

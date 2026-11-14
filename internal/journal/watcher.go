@@ -10,10 +10,11 @@ import (
 	"io"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/ishmukhamet/vps-watchdog/internal/state"
 )
 
 const (
@@ -309,36 +310,9 @@ func validCursor(cursor string) bool {
 	return (seen["s"] && seen["i"]) || (seen["b"] && seen["m"]) || seen["t"]
 }
 
-// writeCursor replaces path atomically and syncs the file and its directory,
-// so a forced reset leaves either the previous or the new cursor, never a
-// truncated one. The temporary name is fixed, so an interrupted write leaves
-// at most one stale file, which the next write replaces.
+// writeCursor stores the cursor atomically; see state.WriteAtomic.
 func writeCursor(path, cursor string) error {
-	tmpName := path + ".tmp"
-	tmp, err := os.OpenFile(tmpName, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o600)
-	if err != nil {
-		return err
-	}
-	if _, err := tmp.WriteString(cursor); err != nil {
-		tmp.Close()
-		return err
-	}
-	if err := tmp.Sync(); err != nil {
-		tmp.Close()
-		return err
-	}
-	if err := tmp.Close(); err != nil {
-		return err
-	}
-	if err := os.Rename(tmpName, path); err != nil {
-		return err
-	}
-	dir, err := os.Open(filepath.Dir(path))
-	if err != nil {
-		return err
-	}
-	defer dir.Close()
-	return dir.Sync()
+	return state.WriteAtomic(path, []byte(cursor))
 }
 
 func scanEntries(ctx context.Context, r io.Reader, handler Handler) error {

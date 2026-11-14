@@ -6,11 +6,13 @@ import (
 	"log"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/ishmukhamet/vps-watchdog/internal/config"
 	"github.com/ishmukhamet/vps-watchdog/internal/event"
 	"github.com/ishmukhamet/vps-watchdog/internal/journal"
+	"github.com/ishmukhamet/vps-watchdog/internal/liveness"
 	"github.com/ishmukhamet/vps-watchdog/internal/metrics"
 	"github.com/ishmukhamet/vps-watchdog/internal/notifier"
 	"github.com/ishmukhamet/vps-watchdog/internal/state"
@@ -22,13 +24,31 @@ type Agent struct {
 	log      *log.Logger
 	state    state.Store
 	events   chan event.Event
+
+	procRoot   string
+	readDisk   func(path string) (metrics.DiskUsage, error)
+	loadPinger func(path string) (pinger, error)
+
+	watchMu sync.Mutex
+	watchUp map[string]time.Time // journal watcher name -> running since
+
+	bg sync.WaitGroup // background goroutines that touch the state directory
 }
 
 func New(cfg config.Config, n notifier.Notifier, logger *log.Logger) *Agent {
 	if logger == nil {
 		logger = log.Default()
 	}
-	return &Agent{cfg: cfg, notifier: n, log: logger, state: state.New(state.DefaultDir)}
+	return &Agent{
+		cfg:        cfg,
+		notifier:   n,
+		log:        logger,
+		state:      state.New(state.DefaultDir),
+		procRoot:   "/proc",
+		readDisk:   metrics.ReadDiskUsage,
+		loadPinger: func(path string) (pinger, error) { return liveness.LoadFile(path) },
+		watchUp:    map[string]time.Time{},
+	}
 }
 
 func (a *Agent) Run(ctx context.Context) error {
@@ -39,8 +59,9 @@ func (a *Agent) Run(ctx context.Context) error {
 	a.events = make(chan event.Event, 64)
 	go a.runNotifier(ctx)
 
-	errCh := make(chan error, 4)
+	errCh := make(chan error, 8)
 	if a.cfg.Login.Enabled {
+		a.expectWatcher("login")
 		go a.runJournalLoop(ctx, "login", journal.Watcher{
 			Identifier: "vps-watchdog-login",
 			CursorFile: a.state.Path("login.cursor"),
@@ -48,6 +69,7 @@ func (a *Agent) Run(ctx context.Context) error {
 		}, a.handleLoginEntry, errCh)
 	}
 	if a.cfg.Sudo.Enabled {
+		a.expectWatcher("sudo")
 		go a.runJournalLoop(ctx, "sudo", journal.Watcher{
 			Identifier:  "sudo",
 			CursorFile:  a.state.Path("sudo.cursor"),
@@ -65,6 +87,19 @@ func (a *Agent) Run(ctx context.Context) error {
 	if a.cfg.Load.Enabled {
 		go func() { errCh <- a.runLoadMonitor(ctx) }()
 	}
+	if a.cfg.Disk.Enabled {
+		go func() { errCh <- a.runDiskMonitor(ctx) }()
+	}
+	if a.cfg.Reboot.Enabled {
+		a.startRebootDetection(ctx, time.Now())
+	} else {
+		// Stale state would report a bogus reboot when detection is
+		// enabled again.
+		a.forgetRebootState()
+	}
+	if a.cfg.Liveness.Enabled {
+		a.startLiveness(ctx)
+	}
 
 	a.emitEvent(ctx, event.Event{
 		Time:     time.Now().UTC(),
@@ -74,22 +109,28 @@ func (a *Agent) Run(ctx context.Context) error {
 		Title:    "vps-watchdog started",
 	})
 
+	// Watchers report nil when the context is cancelled, so errCh can win the
+	// race against ctx.Done on a normal stop; both paths must record it.
+	var err error
 	select {
 	case <-ctx.Done():
-		a.sendEvent(context.Background(), event.Event{
-			Time:     time.Now().UTC(),
-			Host:     a.cfg.HostID,
-			Type:     event.TypeAgent,
-			Severity: event.SeverityInfo,
-			Title:    "vps-watchdog stopped",
-		})
-		return nil
-	case err := <-errCh:
-		if err == nil {
-			return nil
-		}
+	case err = <-errCh:
+	}
+	if ctx.Err() == nil {
 		return err
 	}
+	a.bg.Wait()
+	if a.cfg.Reboot.Enabled {
+		a.markCleanStop(time.Now())
+	}
+	a.sendEvent(context.Background(), event.Event{
+		Time:     time.Now().UTC(),
+		Host:     a.cfg.HostID,
+		Type:     event.TypeAgent,
+		Severity: event.SeverityInfo,
+		Title:    "vps-watchdog stopped",
+	})
+	return nil
 }
 
 func (a *Agent) runJournalLoop(ctx context.Context, name string, watcher journal.Watcher, handler journal.Handler, errCh chan<- error) {
@@ -100,7 +141,9 @@ func (a *Agent) runJournalLoop(ctx context.Context, name string, watcher journal
 			return
 		}
 		a.log.Printf("starting %s journal watcher", name)
+		a.setWatcherUp(name, time.Now())
 		err := watcher.Run(ctx, handler)
+		a.setWatcherUp(name, time.Time{})
 		if ctx.Err() != nil {
 			errCh <- nil
 			return
@@ -310,6 +353,7 @@ func (a *Agent) runLoadMonitor(ctx context.Context) error {
 }
 
 type thresholdState struct {
+	Type      event.Type
 	Name      string
 	Severity  event.Severity
 	Duration  time.Duration
@@ -320,7 +364,7 @@ type thresholdState struct {
 }
 
 func newThresholdState(name string, severity event.Severity, duration, cooldown time.Duration) *thresholdState {
-	return &thresholdState{Name: name, Severity: severity, Duration: duration, Cooldown: cooldown}
+	return &thresholdState{Type: event.TypeLoad, Name: name, Severity: severity, Duration: duration, Cooldown: cooldown}
 }
 
 func (a *Agent) evaluateThreshold(ctx context.Context, s *thresholdState, now time.Time, breached bool, fields map[string]string) {
@@ -329,7 +373,7 @@ func (a *Agent) evaluateThreshold(ctx context.Context, s *thresholdState, now ti
 			a.emitEvent(ctx, event.Event{
 				Time:     now.UTC(),
 				Host:     a.cfg.HostID,
-				Type:     event.TypeLoad,
+				Type:     s.Type,
 				Severity: event.SeverityInfo,
 				Title:    s.Name + " recovered",
 				Fields:   fields,
@@ -341,7 +385,9 @@ func (a *Agent) evaluateThreshold(ctx context.Context, s *thresholdState, now ti
 	}
 	if s.Since.IsZero() {
 		s.Since = now
-		return
+		if s.Duration > 0 {
+			return
+		}
 	}
 	if now.Sub(s.Since) < s.Duration {
 		return
@@ -353,7 +399,7 @@ func (a *Agent) evaluateThreshold(ctx context.Context, s *thresholdState, now ti
 	a.emitEvent(ctx, event.Event{
 		Time:     now.UTC(),
 		Host:     a.cfg.HostID,
-		Type:     event.TypeLoad,
+		Type:     s.Type,
 		Severity: s.Severity,
 		Title:    s.Name,
 		Fields:   fields,

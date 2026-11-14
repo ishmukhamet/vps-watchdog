@@ -72,3 +72,36 @@ automatically: the service log shows `journal cursor rejected by journalctl` or
 `has an invalid format`, and the old value is kept in `*.cursor.rejected` for
 inspection. Watching resumes from the current time, so
 events since the last saved position are not alerted.
+
+## Liveness check is down
+
+The dead man's switch reports the host as down, but the host is up.
+
+1. Look for `liveness` in the service log. `liveness pings disabled` names the
+   problem with the URL file; `liveness ping failed` shows the sanitized
+   network or HTTP error; `liveness ping skipped: a journal watcher is not
+   running` means a watcher keeps failing, see
+   [Watcher cannot read the journal](#watcher-cannot-read-the-journal).
+2. `sudo vps-watchdog validate-config --config /etc/vps-watchdog/config.yaml`
+   checks the URL file without printing the URL.
+3. Check that outbound HTTPS to the ping service is allowed.
+
+## Reboot reported but none was planned
+
+The alert shows whether the previous run stopped cleanly and the approximate
+downtime. A clean stop means the system shut down normally; no clean stop means
+a forced reset, power loss, or kernel crash. Compare the time with the provider's
+maintenance notices and the console or panel audit log. `journalctl --list-boots`
+shows the boots journald retained.
+
+## No disk alerts for a mount point
+
+- `validate-config` rejects paths that the systemd sandbox hides from the
+  service (`/home`, `/root`, `/run/user`, `/tmp`, `/var/tmp`).
+- `disk check <path>: ...` in the service log means the path cannot be
+  measured, for example because it does not exist.
+- Paths on the same filesystem are reported once, under the first path listed.
+  A mount point whose filesystem is not mounted is an ordinary directory on its
+  parent filesystem, so it is silently counted as part of the parent.
+- Btrfs and some other filesystems report no inode counts; they get space alerts
+  only.

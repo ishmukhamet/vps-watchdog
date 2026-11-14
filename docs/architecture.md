@@ -35,13 +35,16 @@ Paths, commands, and config keys live in [install.md](install.md) and
 ```text
 SSH / console ─▶ PAM ─▶ hook ─▶ journald ─┐
 sudo ──────────────────────────▶ journald ─┤
-/proc (CPU, memory, PSI) ──────────────────┤
+/proc (CPU, memory, PSI, boot id) ─────────┤
+statfs (disk space, inodes) ───────────────┤
                                            ▼
-                                 vps-watchdog agent
+                                 vps-watchdog agent ──────────────┐
                        watchers ─▶ normalized events ─▶ bounded queue
-                                                            │ HTTPS
-                                                            ▼
-                                                    Telegram Bot API
+                                                            │      │ liveness
+                                                            │ HTTPS│ ping, HTTPS
+                                                            ▼      ▼
+                                                    Telegram   dead man's switch
+                                                    Bot API    (e.g. Healthchecks)
 ```
 
 ## Signals
@@ -70,6 +73,28 @@ recovered after an alert             -> recovery event
 
 PSI is optional; hosts without it simply have no I/O signal.
 
+**Disk.** Free space and free inodes of the configured paths are measured with
+`statfs`, as `df` reports them for unprivileged users, and alerted with the same
+duration, cooldown, and recovery logic as load. Paths on one filesystem are
+reported once. Filesystems without a fixed inode table report no inodes and get
+no inode alerts. See [ADR 0010](adr/0010-disk-space-monitoring.md).
+
+**Reboots.** On start the agent compares the kernel boot id with the one in its
+state directory. A changed id is reported as a reboot, with whether the previous
+run stopped cleanly and the approximate downtime. The agent records a clean
+stop on `SIGTERM` and refreshes a "last alive" timestamp every minute. See
+[ADR 0009](adr/0009-reboot-detection.md).
+
+## Liveness
+
+Silence cannot be detected from the host. When enabled, the agent sends a bare
+HTTPS `GET` to a dead man's switch, such as Healthchecks, once per interval, and
+that service raises the alarm when pings stop. A ping is sent only while every
+enabled journal watcher has been running for at least a few seconds, so a
+watcher that cannot read the journal stops the pings too. Pings run outside the
+event queue and never delay collection or delivery. See
+[ADR 0008](adr/0008-external-liveness-monitoring.md).
+
 ## Journal cursors
 
 Journal watchers save the cursor of every handled entry in the state
@@ -88,13 +113,19 @@ The agent prefers degraded operation over stopping:
 - Events go through a bounded in-memory queue. If delivery stalls long enough
   for the queue to fill, new events are dropped and logged locally; collection
   continues.
+- The reboot event is the exception: it is stored in the state directory and
+  retried with backoff until delivered, across agent restarts. A later reboot
+  before delivery keeps a count and time of the undelivered ones.
+- State files are replaced atomically and synced, so a forced reset leaves
+  either the old or the new content.
 - A failing watcher terminates its `journalctl` subprocess rather than leaving it
   orphaned, and includes bounded subprocess stderr in its error so permission
   problems are visible in service logs.
 - Oversized or malformed journal entries are skipped, so hostile input cannot
   force a restart loop.
-- Delivery errors are sanitized before logging, because Go network errors can
-  include the request URL, which contains the bot token.
+- Delivery and ping errors are sanitized before logging, because Go network
+  errors can include the request URL, which contains the bot token or the
+  secret ping URL.
 
 ## Package boundaries
 
@@ -104,10 +135,11 @@ internal/agent/             orchestration; may depend on any internal package
 internal/config/            loading and validation; no runtime dependencies
 internal/event/             normalized events and Telegram HTML rendering
 internal/journal/           journalctl subprocesses and entry parsing
-internal/metrics/           /proc collectors behind injectable readers
+internal/liveness/          dead man's switch pings; no dependency on agent internals
+internal/metrics/           /proc and statfs collectors behind injectable readers
 internal/notifier/          delivery interface
 internal/notifier/telegram/ Telegram client; no dependency on agent internals
-internal/state/             state directory helpers
+internal/state/             state directory helpers and atomic writes
 packaging/                  installer, uninstaller, systemd unit, PAM hook
 scripts/                    repository checks and release helpers
 ```

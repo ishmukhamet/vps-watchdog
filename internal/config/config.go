@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 )
@@ -20,6 +21,9 @@ type Config struct {
 	Login    LoginConfig
 	Sudo     SudoConfig
 	Load     LoadConfig
+	Disk     DiskConfig
+	Reboot   RebootConfig
+	Liveness LivenessConfig
 }
 
 type TelegramConfig struct {
@@ -47,6 +51,38 @@ type LoadConfig struct {
 	IODurationSec       int
 }
 
+// DiskConfig controls low disk space alerts (ADR 0010).
+type DiskConfig struct {
+	Enabled           bool
+	Paths             []string
+	SampleIntervalSec int
+	CooldownSec       int
+	DurationSec       int
+	FreePercent       float64
+	InodesFreePercent float64
+}
+
+// RebootConfig controls reboot detection (ADR 0009).
+type RebootConfig struct {
+	Enabled bool
+}
+
+// LivenessConfig controls pings to an external dead man's switch (ADR 0008).
+// The ping URL is a secret and lives in its own file.
+type LivenessConfig struct {
+	Enabled     bool
+	PingURLFile string
+	IntervalSec int
+}
+
+// maxDiskPaths bounds the number of watched mount points.
+const maxDiskPaths = 16
+
+// sandboxHiddenPrefixes are replaced for the service by the systemd unit
+// (ProtectHome=true, PrivateTmp=true); statfs there would measure a
+// placeholder, not the real filesystem.
+var sandboxHiddenPrefixes = []string{"/home", "/root", "/run/user", "/tmp", "/var/tmp"}
+
 func Default() Config {
 	host, _ := os.Hostname()
 	if strings.TrimSpace(host) == "" {
@@ -70,6 +106,21 @@ func Default() Config {
 			MemDurationSec:      180,
 			PSIIOSomeAvg60:      20,
 			IODurationSec:       180,
+		},
+		Disk: DiskConfig{
+			Enabled:           true,
+			Paths:             []string{"/"},
+			SampleIntervalSec: 60,
+			CooldownSec:       21600,
+			DurationSec:       300,
+			FreePercent:       10,
+			InodesFreePercent: 10,
+		},
+		Reboot: RebootConfig{Enabled: true},
+		Liveness: LivenessConfig{
+			Enabled:     false,
+			PingURLFile: "/etc/vps-watchdog/liveness.url",
+			IntervalSec: 60,
 		},
 	}
 }
@@ -119,6 +170,28 @@ func Parse(data []byte) (Config, error) {
 			cfg.Load.PSIIOSomeAvg60, err = parseFloat(key, raw)
 		case "load.io_duration_sec":
 			cfg.Load.IODurationSec, err = parseInt(key, raw)
+		case "disk.enabled":
+			cfg.Disk.Enabled, err = parseBool(key, raw)
+		case "disk.paths":
+			cfg.Disk.Paths = parseList(raw)
+		case "disk.sample_interval_sec":
+			cfg.Disk.SampleIntervalSec, err = parseInt(key, raw)
+		case "disk.cooldown_sec":
+			cfg.Disk.CooldownSec, err = parseInt(key, raw)
+		case "disk.duration_sec":
+			cfg.Disk.DurationSec, err = parseInt(key, raw)
+		case "disk.free_percent":
+			cfg.Disk.FreePercent, err = parseFloat(key, raw)
+		case "disk.inodes_free_percent":
+			cfg.Disk.InodesFreePercent, err = parseFloat(key, raw)
+		case "reboot.enabled":
+			cfg.Reboot.Enabled, err = parseBool(key, raw)
+		case "liveness.enabled":
+			cfg.Liveness.Enabled, err = parseBool(key, raw)
+		case "liveness.ping_url_file":
+			cfg.Liveness.PingURLFile = parseString(raw)
+		case "liveness.interval_sec":
+			cfg.Liveness.IntervalSec, err = parseInt(key, raw)
 		default:
 			return Config{}, fmt.Errorf("unknown config key %q", key)
 		}
@@ -168,10 +241,55 @@ func (c Config) Validate() error {
 	if c.Load.IODurationSec <= 0 {
 		errs = append(errs, "load.io_duration_sec must be > 0")
 	}
+	errs = append(errs, c.Disk.validate()...)
+	if c.Liveness.Enabled && strings.TrimSpace(c.Liveness.PingURLFile) == "" {
+		errs = append(errs, "liveness.ping_url_file must not be empty when liveness is enabled")
+	}
+	if c.Liveness.IntervalSec < 10 {
+		errs = append(errs, "liveness.interval_sec must be >= 10")
+	}
 	if len(errs) > 0 {
 		return errors.New(strings.Join(errs, "; "))
 	}
 	return nil
+}
+
+func (d DiskConfig) validate() []string {
+	var errs []string
+	if d.SampleIntervalSec <= 0 {
+		errs = append(errs, "disk.sample_interval_sec must be > 0")
+	}
+	if d.CooldownSec < 0 {
+		errs = append(errs, "disk.cooldown_sec must be >= 0")
+	}
+	if d.DurationSec < 0 {
+		errs = append(errs, "disk.duration_sec must be >= 0")
+	}
+	if d.FreePercent <= 0 || d.FreePercent >= 100 {
+		errs = append(errs, "disk.free_percent must be in (0, 100)")
+	}
+	if d.InodesFreePercent < 0 || d.InodesFreePercent >= 100 {
+		errs = append(errs, "disk.inodes_free_percent must be in [0, 100)")
+	}
+	if d.Enabled && len(d.Paths) == 0 {
+		errs = append(errs, "disk.paths must list at least one path when disk is enabled")
+	}
+	if len(d.Paths) > maxDiskPaths {
+		errs = append(errs, fmt.Sprintf("disk.paths must list at most %d paths", maxDiskPaths))
+	}
+	for _, p := range d.Paths {
+		if !strings.HasPrefix(p, "/") {
+			errs = append(errs, fmt.Sprintf("disk.paths: %q must be absolute", p))
+			continue
+		}
+		clean := filepath.Clean(p)
+		for _, hidden := range sandboxHiddenPrefixes {
+			if clean == hidden || strings.HasPrefix(clean, hidden+"/") {
+				errs = append(errs, fmt.Sprintf("disk.paths: %q is hidden from the service by the systemd sandbox", p))
+			}
+		}
+	}
+	return errs
 }
 
 func parseSimpleYAML(data []byte) (map[string]string, error) {
@@ -268,6 +386,17 @@ func parseString(s string) string {
 		}
 	}
 	return s
+}
+
+// parseList splits a comma-separated value; the YAML subset has no lists.
+func parseList(raw string) []string {
+	var out []string
+	for _, item := range strings.Split(parseString(raw), ",") {
+		if item = strings.TrimSpace(item); item != "" {
+			out = append(out, item)
+		}
+	}
+	return out
 }
 
 func parseBool(key, raw string) (bool, error) {

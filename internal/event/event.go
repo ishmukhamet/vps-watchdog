@@ -12,10 +12,12 @@ const maxFieldValueRunes = 1000
 type Type string
 
 const (
-	TypeAgent Type = "agent"
-	TypeLogin Type = "login"
-	TypeSudo  Type = "sudo"
-	TypeLoad  Type = "load"
+	TypeAgent  Type = "agent"
+	TypeLogin  Type = "login"
+	TypeSudo   Type = "sudo"
+	TypeLoad   Type = "load"
+	TypeDisk   Type = "disk"
+	TypeReboot Type = "reboot"
 )
 
 type Severity string

@@ -48,7 +48,9 @@ installation without losing configuration.
 - Writes a default config if none exists; existing config is kept.
 - Prompts for the Telegram token and chat id if their files are missing or
   empty.
-- Enforces `root:vpswatchdog` and mode `0640` on config and credential files.
+- Enforces `root:vpswatchdog` and mode `0640` on config and credential files,
+  including the liveness ping URL file if it exists. Liveness pings are off by
+  default; see [configuration.md](configuration.md#liveness-pings).
 - Adds a `session optional` PAM line for the login hook to `sshd` and `login`
   PAM services, keeping a `.vps-watchdog.bak` copy of each file before the first
   edit.
@@ -67,6 +69,7 @@ Installed paths:
 /etc/vps-watchdog/config.yaml
 /etc/vps-watchdog/telegram.token
 /etc/vps-watchdog/telegram.chat_id
+/etc/vps-watchdog/liveness.url        # optional, created by the administrator
 /etc/systemd/system/vps-watchdog.service
 /var/lib/vps-watchdog/
 ```
