@@ -413,3 +413,22 @@ func TestDiskStateFollowsFilesystemNotPath(t *testing.T) {
 		t.Fatalf("duplicate alert after the first path failed: %v", n.messages)
 	}
 }
+
+func TestMigrateStateDiscardsLegacyCursorsOnce(t *testing.T) {
+	a, _ := testAgent(t, &syncNotifier{})
+	for _, name := range []string{"login.cursor", "sudo.cursor", ".#sudo.cursor1e4ccfcbaa868f93"} {
+		_ = os.WriteFile(a.state.Path(name), []byte("s=1;i=1"), 0o600)
+	}
+	a.migrateState()
+	for _, name := range []string{"login.cursor", "sudo.cursor", ".#sudo.cursor1e4ccfcbaa868f93"} {
+		if _, err := os.Stat(a.state.Path(name)); !os.IsNotExist(err) {
+			t.Fatalf("%s kept: %v", name, err)
+		}
+	}
+	// Cursors written by this version survive later starts.
+	_ = os.WriteFile(a.state.Path("login.cursor"), []byte("s=1;i=2"), 0o600)
+	a.migrateState()
+	if _, err := os.Stat(a.state.Path("login.cursor")); err != nil {
+		t.Fatalf("current cursor removed: %v", err)
+	}
+}

@@ -45,6 +45,9 @@ The agent owns the cursor file:
 - An entry counts as handled once its event is queued, not once it is
   delivered ([ADR 0005](0005-collection-independent-of-delivery.md)). After a
   forced reset at most the last entry can be alerted twice.
+- Cursor files written by journalctl in earlier versions can be months old.
+  They are discarded once on upgrade, recorded by a `state.version` file, so
+  the first start of the new version is quiet instead of replaying history.
 - One small synced write per handled entry. Login and sudo entries are rare, so
   the cost is negligible.
 - A cursor copied from another host or journal can cause skipped or replayed

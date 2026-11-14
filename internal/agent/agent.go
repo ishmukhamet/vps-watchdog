@@ -55,6 +55,7 @@ func (a *Agent) Run(ctx context.Context) error {
 	if err := a.state.Ensure(); err != nil {
 		return err
 	}
+	a.migrateState()
 
 	a.events = make(chan event.Event, 64)
 	go a.runNotifier(ctx)
