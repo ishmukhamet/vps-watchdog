@@ -5,6 +5,10 @@ DATE := $(shell date -u +%Y-%m-%dT%H:%M:%SZ)
 DIST_DIR := dist
 BIN := $(DIST_DIR)/$(APP)-linux-amd64
 
+# User-facing docs shipped in the release archive. Design docs and contributor
+# rules stay in the repository.
+PACKAGE_DOCS := docs/install.md docs/configuration.md docs/troubleshooting.md docs/SECURITY.md
+
 LDFLAGS := -s -w \
 	-X main.version=$(VERSION) \
 	-X main.commit=$(COMMIT) \
@@ -55,7 +59,9 @@ package: build
 	mkdir -p $(DIST_DIR)/package
 	cp $(BIN) $(DIST_DIR)/package/$(APP)
 	cp README.md LICENSE $(DIST_DIR)/package/
-	cp -R packaging configs docs scripts AGENTS.md $(DIST_DIR)/package/
+	cp -R packaging configs $(DIST_DIR)/package/
+	mkdir -p $(DIST_DIR)/package/docs
+	cp $(PACKAGE_DOCS) $(DIST_DIR)/package/docs/
 	tar -C $(DIST_DIR)/package -czf $(DIST_DIR)/$(APP)-linux-amd64.tar.gz .
 	rm -rf $(DIST_DIR)/package
 

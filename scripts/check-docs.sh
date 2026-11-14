@@ -5,16 +5,11 @@ required=(
   "README.md"
   "LICENSE"
   "AGENTS.md"
-  "docs/index.md"
   "docs/architecture.md"
   "docs/SECURITY.md"
-  "docs/sdd.md"
-  "docs/QUALITY.md"
-  "docs/product-specs/mvp.md"
-  "docs/exec-plans/PLANS.md"
-  "docs/exec-plans/active/0001-mvp-agent.md"
-  "docs/design-docs/core-beliefs.md"
-  "docs/references/harness-engineering-notes.md"
+  "docs/install.md"
+  "docs/configuration.md"
+  "docs/troubleshooting.md"
 )
 
 for path in "${required[@]}"; do

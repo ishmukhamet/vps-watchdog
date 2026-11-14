@@ -10,7 +10,6 @@ What changed and why?
 ## Docs
 
 - [ ] README/docs updated or not needed
-- [ ] ExecPlan updated or not needed
 - [ ] ADR added or not needed
 
 ## Security

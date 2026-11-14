@@ -1,4 +1,4 @@
-# ADR 0002: Use journalctl subprocess for the MVP
+# ADR 0002: Read journald through a journalctl subprocess
 
 ## Status
 

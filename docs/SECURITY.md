@@ -1,99 +1,74 @@
-# Security policy and threat model
+# Security
 
-## Security posture
+## Reporting a vulnerability
 
-`vps-watchdog` is a personal monitoring agent. It is intended to create fast,
-off-host visibility into suspicious VPS activity. It is not a prevention tool and
-not a tamper-proof audit system.
+Do not put exploit details, secrets, or private hostnames in public issues. Use
+GitHub private vulnerability reporting if it is enabled for the repository;
+otherwise open a minimal public issue asking for a private contact.
 
-## What the project tries to detect
+## Purpose and limits
 
-- Successful PAM-covered logins.
-- Sudo usage and sudo failures visible in journald.
-- Sustained abnormal CPU, memory, or I/O pressure.
-- Agent startup and basic notification health.
+`vps-watchdog` gives fast off-host visibility into suspicious activity on a VPS.
+It detects; it does not prevent, and it is not an audit log.
 
-## What the project does not detect
+It can see what passes through PAM, journald, and `/proc` on the host while the
+agent is intact. It cannot see:
 
-- Cloud provider panel access before the provider opens a console.
-- Hypervisor-level access.
-- Kernel-level rootkits.
-- Direct tampering by an attacker who already has root.
-- Activity that bypasses PAM and journald visibility.
-- Network compromise that does not produce local host signals.
+- access through the cloud provider's panel or hypervisor;
+- kernel-level rootkits or anything else that hides from PAM and journald;
+- activity after an attacker with root has disabled or altered the agent;
+- network-level compromise that leaves no local trace.
 
-## Trust assumptions
+## Trust boundary
 
-The MVP assumes:
+Local root is trusted. An attacker who reaches root can stop the service, edit
+PAM, replace the binary, and read the bot token. The design goal is to get
+evidence off-host before that point, not to survive it.
 
-- systemd is the init system;
-- journald is available;
-- `/proc` is readable;
-- outbound HTTPS to Telegram is available;
-- the installer is run as root by the legitimate administrator;
-- the runtime user `vpswatchdog` is not used for interactive login.
+Assumptions: systemd and journald are present, `/proc` is readable, the
+installer is run by the legitimate administrator, and nobody logs in as the
+runtime user.
 
-## Secret handling
+## Principles
 
-Telegram secrets are stored as files under `/etc/vps-watchdog`:
+**Never lock out the administrator.** The PAM hook is attached as
+`session optional`, does no network I/O, only writes a local journal entry, and
+always exits successfully. A monitoring failure must never block a login.
 
-```text
-/etc/vps-watchdog/telegram.token
-/etc/vps-watchdog/telegram.chat_id
-```
+**Never let the network gate detection.** Service startup, watchers, and event
+handling do not wait on network availability. Delivery is best-effort; see the
+failure model in [architecture.md](architecture.md#failure-model).
 
-Expected permissions:
+**Least privilege.** The agent runs as a locked system user with no login shell.
+It gets read access to journals and its config, write access to its state
+directory, and nothing else; the systemd unit is sandboxed accordingly. Only the
+installer runs as root. See
+[ADR 0004](adr/0004-dedicated-runtime-user.md).
 
-```text
-owner: root
-group: vpswatchdog
-mode:  0640
-```
+**Secrets live in files, not in config, flags, or logs.**
 
-Rules:
+- The bot token and chat id are separate files readable only by root and the
+  runtime group. The installer enforces this on every run.
+- The token is never printed, passed as a CLI flag, or logged — including inside
+  a full Telegram API URL. Delivery errors are sanitized because Go network
+  errors embed the request URL.
+- No real secrets, hostnames, IP addresses, or chat ids in examples, tests,
+  docs, or issues. `make check-docs` scans for token-shaped strings.
 
-- Never print the bot token.
-- Never log a full Telegram API URL containing the token.
-- Never pass the token as a CLI flag.
-- Sanitize Telegram send errors before logging or returning them; Go network
-  errors can include the request URL.
-- Do not include real secrets in examples, tests, docs, issues, or ExecPlans.
+**Host input is untrusted.** PAM values and journal entries can be influenced by
+an attacker. They are encoded at the source where possible, bounded in size,
+parsed defensively, and HTML-escaped before rendering into Telegram messages.
 
-## PAM safety
+**Installers are auditable.** Install and uninstall are idempotent, repair
+ownership and permissions of what they own, keep a backup before editing PAM
+files, and remove only what they created.
 
-The PAM hook must remain small and non-blocking. It must not perform network I/O.
-It should only emit a local log event and exit successfully.
+## Changes that need extra care
 
-The systemd service, agent startup path, and local event handlers must not wait
-on network availability before login and sudo monitoring continues. Telegram
-delivery is best-effort and must not gate local event collection.
+Describe the security impact in the pull request for any change to:
 
-PAM-provided values are untrusted. The installed hook hex-encodes PAM values
-before writing its local journal message so spaces, quotes, and key-like content
-cannot reshape parsed alert fields.
-
-The PAM line uses `session optional` so monitoring failure does not lock out the
-administrator.
-
-## Runtime user
-
-The service runs as `vpswatchdog`, a locked system user. It is granted only the
-minimum practical read access needed for journald/auth logs and state files.
-
-## Reporting vulnerabilities
-
-Please do not include secrets, private hostnames, or exploit details in public
-issues. If GitHub private vulnerability reporting is enabled for the repository,
-use that channel. Otherwise, open a minimal public issue asking for a private
-security contact without disclosing sensitive details.
-
-## Security review checklist
-
-Before a stable release:
-
-- Verify installer idempotency on Debian and Ubuntu LTS.
-- Verify no token leakage in logs or errors.
-- Verify systemd sandbox settings do not break runtime behavior.
-- Verify PAM hook is non-blocking under Telegram/network failures.
-- Verify `uninstall.sh` removes only files it owns.
-- Add integration tests or VM smoke tests for install/uninstall.
+- anything executed from PAM or with root;
+- systemd unit sandboxing and supplementary groups;
+- how secrets are read, stored, or reported in errors;
+- parsing of journal or PAM input;
+- message rendering.

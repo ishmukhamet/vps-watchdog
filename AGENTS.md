@@ -1,106 +1,51 @@
 # AGENTS.md
 
-This file is the entry point for coding agents working in this repository. Keep
-it short. Treat it as a map, not as the full instruction manual.
+Rules for coding agents and human contributors. Start with
+[README.md](README.md) for what the project is; read
+[docs/architecture.md](docs/architecture.md) and
+[docs/SECURITY.md](docs/SECURITY.md) before changing runtime, installer, or
+anything on the login path.
 
-## Project
+The repository is public: everything committed — code, docs, examples, commit
+messages — must be safe to publish. No secrets, real hostnames, IP addresses,
+chat ids, or personal data.
 
-`vps-watchdog` is a Go-based Linux VPS security monitoring agent. It runs as a
-systemd system service, reads local host signals, and sends Telegram alerts.
+## Invariants
 
-The project is personal-first but public-quality: code, docs, scripts, commit
-history, and tests should remain suitable for a future public release.
+Breaking any of these needs an ADR in `docs/adr/`, not just a code change.
 
-## Start here
+- Login and sudo monitoring never wait on the network. The PAM hook never does
+  network I/O and never fails closed.
+- Telegram tokens and full Telegram API URLs never appear in logs, errors, CLI
+  flags, tests, or docs.
+- Log, PAM, and journal input is untrusted text.
+- The runtime runs as an unprivileged user; root is limited to the installer.
+- Installer and uninstaller are idempotent and touch only what they own.
+- Standard library first; a dependency needs a documented reason.
+- One self-contained `linux/amd64` binary.
 
-Read these files before non-trivial work:
+## Making a change
 
-1. `README.md` — user-facing overview.
-2. `docs/index.md` — documentation map.
-3. `docs/product-specs/mvp.md` — current product scope.
-4. `docs/architecture.md` — runtime architecture and boundaries.
-5. `docs/SECURITY.md` — threat model and security constraints.
-6. `docs/exec-plans/PLANS.md` — required format for complex tasks.
+1. Add tests for parsing, threshold logic, formatting, and error paths. A
+   repeated mistake becomes a test or a check in `scripts/`, not a new paragraph
+   of guidance.
+2. Update the owning document in the same change:
+   - commands, paths, config keys → `docs/install.md`, `docs/configuration.md`;
+   - a new failure mode seen in practice → `docs/troubleshooting.md`;
+   - structure, boundaries, failure handling → `docs/architecture.md`;
+   - threat model or secret handling → `docs/SECURITY.md`;
+   - a decision with lasting trade-offs → a new ADR;
+   - contributor rules → this file.
+3. Run `make check` (fmt, vet, test, docs check, build). `make help` lists
+   focused targets.
 
-## Development rules
+## Writing docs
 
-- Use Go standard library unless a dependency has clear, documented value.
-- Keep the binary self-contained and easy to cross-compile for `linux/amd64`.
-- Prefer explicit boundaries over clever abstractions.
-- Do not make login or sudo paths depend on network availability.
-- Never log Telegram bot tokens or full Telegram API URLs.
-- Keep installer actions idempotent.
-- Keep runtime code non-root where possible.
-- Treat all log/PAM/journal input as untrusted text.
-- Include tests for parsing, threshold logic, formatting, and error paths.
-
-## Commands
-
-Run before proposing changes:
-
-```bash
-make check
-```
-
-Useful focused commands:
-
-```bash
-make fmt
-make test
-make vet
-make build
-make check-docs
-```
-
-## ExecPlans
-
-Use an ExecPlan for:
-
-- new monitoring signals;
-- installer changes;
-- systemd/PAM behavior changes;
-- notification semantics;
-- state/cursor changes;
-- security-sensitive refactors;
-- changes spanning more than two packages.
-
-ExecPlans live in:
-
-```text
-docs/exec-plans/active/
-docs/exec-plans/completed/
-```
-
-Follow `docs/exec-plans/PLANS.md`. ExecPlans are living documents: update the
-progress, decisions, validation, and discoveries as work proceeds.
-
-## Documentation updates
-
-If behavior changes, update docs in the same change:
-
-- User behavior: `README.md`, `docs/operations/*.md`.
-- Architecture: `docs/architecture.md` and, when needed, an ADR.
-- Security behavior: `docs/SECURITY.md`.
-- Development workflow: `AGENTS.md` or `docs/sdd.md`.
-- Planned work: active ExecPlan and `docs/QUALITY.md`.
-
-## Repository boundaries
-
-Expected source layout:
-
-```text
-cmd/vps-watchdog/          CLI entrypoint
-internal/agent/            process orchestration
-internal/config/           config loading and validation
-internal/event/            event model and formatting
-internal/journal/          journald integration
-internal/metrics/          /proc and PSI collectors
-internal/notifier/         notification interfaces
-internal/notifier/telegram Telegram implementation
-internal/state/            persistent runtime state helpers
-packaging/                 installer, uninstaller, systemd/PAM assets
-scripts/                   repository checks and release helpers
-docs/                      source-of-truth documentation
-```
-
-Do not add new top-level directories without documenting why in `docs/index.md`.
+- Each fact has one home; elsewhere, link to it.
+- Entry points (`README.md`, this file) stay short and link to depth.
+- Describe principles, rules, and reasons, not an inventory of what the code
+  currently contains. User-facing paths, commands, and config keys are the
+  exception: they are a contract.
+- Progress, known gaps, and plans belong in GitHub issues, not in docs.
+- Prefer concrete statements ("the hook does no network I/O") to adjectives
+  ("the hook is lightweight").
