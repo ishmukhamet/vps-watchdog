@@ -102,7 +102,7 @@ The agent prefers degraded operation over stopping:
 cmd/vps-watchdog/           CLI wiring only, no business logic
 internal/agent/             orchestration; may depend on any internal package
 internal/config/            loading and validation; no runtime dependencies
-internal/event/             normalized events and rendering; no Telegram dependency
+internal/event/             normalized events and Telegram HTML rendering
 internal/journal/           journalctl subprocesses and entry parsing
 internal/metrics/           /proc collectors behind injectable readers
 internal/notifier/          delivery interface

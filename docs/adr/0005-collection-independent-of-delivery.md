@@ -24,6 +24,9 @@ exactly when it matters most.
 ## Consequences
 
 - A network outage cannot block detection.
-- Alerts can be lost during a long outage or after a restart while events are
-  queued. A durable queue would close this gap.
-- Local service logs remain the fallback record of dropped events.
+- Delivery is attempted once per event. An alert is lost if that attempt
+  fails, if the queue is full, or if the agent stops while events are queued.
+  The queue is not persisted.
+- The service log records the type and title of a dropped event and the
+  sanitized error of a failed send, not the event's fields. The system journal
+  remains the record of what happened.

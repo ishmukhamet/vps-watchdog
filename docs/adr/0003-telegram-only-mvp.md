@@ -18,6 +18,8 @@ notifier interface.
 ## Consequences
 
 - The project stays small; rendering can be tuned for one client.
-- Other channels can be added behind the same interface when there is demand.
+- The notifier interface takes a message already rendered as Telegram HTML.
+  A second channel needs rendering moved behind the interface first; the
+  interface alone does not make channels interchangeable.
 - The bot token is embedded in API URLs, so URL- and error-handling must keep it
   out of logs (see [SECURITY.md](../SECURITY.md)).
